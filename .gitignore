@@ -1,4 +1,12 @@
-.DS_store
-bin/
-sketches/
-vice.log
+*.prg
+*.o
+*.d64
+*.sym
+
+build
+.gradle
+.ra
+
+.source.txt
+os
+Hello

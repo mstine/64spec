@@ -22,6 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+/*
+ * TODO:
+
+    - Remove BasicUpstart()
+    - Move location in memory
+    - Replace _PLOT with C64 OS version
+    (using Context Drawing System: https://c64os.com/c64os/programmersguide/usingkernal_screen)
+
+
+
+
+ */
+
 .const _64SPEC_VERSION_MAJOR = 0
 .const _64SPEC_VERSION_MINOR = 7
 .const _64SPEC_VERSION_PATCH = 0
@@ -30,19 +43,29 @@
   .return "" + _64SPEC_VERSION_MAJOR + '.' + _64SPEC_VERSION_MINOR + '.' + _64SPEC_VERSION_PATCH
 }
 
+// C64 VIC ADDRESSES
 .const _TEXT_COLOR = $0286
 .const _BORDER = $d020
 .const _BACKGROUND = $d021
+
+// C64 KERNAL VECTORS
 .const _CHROUT = $ffd2
 .const _CHKOUT = $FFC9
-.const _PLOT = $fff0
+.const _PLOT = $fff0 // NOT C64 OS COMPATIBLE
 .const _SETLFS = $FFBA
 .const _OPEN = $FFC0
 .const _CLOSE = $FFC3
 .const _SETNAM = $FFBD
 .const _CLRCHN = $FFCC
-.const _CLRSCR = $e544
+
+// C64 KERNAL ROUTINE - Init Screen Line Link Table and Clear Screen
+// Doesn't appear to be used
+// .const _CLRSCR = $e544
+
+// C64 BASIC ROM VECTOR
 .const _PRINTWORD = $bdcd
+
+
 .const _CR=13
 .const _CLS = 147
 .const _UPPERCASE = 142
@@ -309,6 +332,8 @@
   }
 }
 
+// Code begins here...
+
   :BasicUpstart2(tests_init)
 
 .pc = * "Tests Data"
@@ -396,6 +421,8 @@ tests_init:
 .pc = * "Specification"
 specification:
 }
+
+// All of the macros
 
 .macro finish_spec() {
 .pc = * "Spec Results Rendering" 
@@ -508,6 +535,10 @@ specification:
   :_64spec_set_screen_output()
 }
 
+/*
+ * TODO: This macro is working directly against the VIC... I will need an equivalent
+ * for the Context Drawing System.
+ */
 .macro _change_text_color_on_final_result() {
   .if (_64SPEC.change_text_color_on_final_result) {
     bit sfspec._tests_result
@@ -523,6 +554,10 @@ specification:
   }
 }
 
+/*
+ * TODO: This macro is working directly against the VIC... I will need an equivalent
+ * for the Context Drawing System.
+ */
 .macro _set_screen_colors() {
   .if ([_64SPEC.change_border_color && _64SPEC.change_border_color_on_final_result] || [_64SPEC.change_background_color && _64SPEC.change_background_color_on_final_result]) {
       bit sfspec._tests_result
@@ -844,6 +879,7 @@ specification:
   end:
 }
 
+// TODO: Needs attention...
 .macro describe(subject) {
   .if (_64SPEC.print_context_description) {
     jmp end_text
@@ -871,6 +907,7 @@ specification:
   }
 }
 
+// TODO: Needs attention...
 .macro _finalize_last_context() {
   .if (_64SPEC.print_context_description ) {
     .if (_64SPEC.change_context_description_text_color) {
@@ -900,6 +937,7 @@ specification:
   }
 }
 
+// TODO: Needs attention...
 .macro it(description) {
   .if (_64SPEC.print_example_description) {
     jmp end_text
@@ -928,6 +966,7 @@ specification:
   }
 }
 
+// TODO: Needs attention...
 .macro _finalize_last_example() {
   .if (_64SPEC.print_example_description) {
     .if (_64SPEC.change_example_description_text_color) {
@@ -1006,12 +1045,14 @@ end:
   jsr _CHROUT
 }
 
+// TODO: Something tells me this won't work...
 .pseudocommand _print_int8 value {
   ldx value
   lda #0
   jsr _PRINTWORD
 }
 
+// TODO: Something tells me this won't work...
 .pseudocommand _print_int16 value {
   ldx _64spec_extract_byte_argument(value, 0)
   lda _64spec_extract_byte_argument(value, 1)
@@ -1126,12 +1167,21 @@ end_filename:
   jsr _OPEN
 }
 
+/*
+ * TODO: Reads current cursor position using _PLOT. Replace with appropriate
+ * C64 OS KERNAL call.
+ */
 .macro _64spec_kernal_plot_get(cursor_position) {
   sec
   jsr _PLOT
   stx cursor_position._row
   sty cursor_position._column
 }
+
+/*
+ * TODO: Sets current cursor position using _PLOT. Replace with appropriate
+ * C64 OS KERNAL call.
+ */
 .macro _64spec_kernal_plot_set(cursor_position) {
   clc
   ldx cursor_position._row
