@@ -25,9 +25,9 @@
 /*
  * TODO:
 
-    - Remove BasicUpstart()
-    - Move location in memory
-    - Replace _PLOT with C64 OS version
+    x Remove BasicUpstart()
+    x Move location in memory
+    x Replace _PLOT with C64 OS version
     (using Context Drawing System: https://c64os.com/c64os/programmersguide/usingkernal_screen)
 
 
@@ -73,6 +73,11 @@
 
 
 .struct _64SPEC_CONFIG {
+  is_c64os,
+  c64os_kernal_plot_get_routine,
+  c64os_kernal_plot_set_routine,
+  c64os_set_screen_colors_routine,
+  c64os_change_text_color_on_final_result_routine,
   print_header,
   clear_screen_at_initialization,
   change_character_set,
@@ -119,6 +124,11 @@
 
 // Default configuration
 .const _64SPEC = _64SPEC_CONFIG()
+.eval config_64spec("is_c64os", false)
+.eval config_64spec("c64os_kernal_plot_get_routine", "")
+.eval config_64spec("c64os_kernal_plot_set_routine", "")
+.eval config_64spec("c64os_set_screen_colors_routine", "")
+.eval config_64spec("c64os_change_text_color_on_final_result_routine", "")
 .eval config_64spec("print_header", true)
 .eval config_64spec("clear_screen_at_initialization", true)
 .eval config_64spec("change_character_set", "lowercase")
@@ -177,6 +187,13 @@
 .eval _64SPEC.set("_use_custom_assertion_failed_subroutine", false)
 
 .function config_64spec(key, value) {
+  .if (validate_boolean_option("is_c64os", key, value)) .return null
+  
+  .if (validate_c64os_non_empty_string_option("c64os_kernal_plot_get_routine", key, value)) .return null
+  .if (validate_c64os_non_empty_string_option("c64os_kernal_plot_set_routine", key, value)) .return null
+  .if (validate_c64os_non_empty_string_option("c64os_set_screen_colors_routine", key, value)) .return null
+  .if (validate_c64os_non_empty_string_option("c64os_change_text_color_on_final_result_routine", key, value)) .return null
+
   .if (validate_boolean_option("print_header", key, value)) .return null
   .if (validate_boolean_option("clear_screen_at_initialization", key, value)) .return null
   .if (validate_boolean_option("change_text_color", key, value)) .return null
@@ -269,6 +286,19 @@
   .return true
 }
 
+.function validate_c64os_non_empty_string_option(expected_key, key, value) {
+  .if (key != expected_key) .return false
+
+  #if value
+  .if (_64SPEC.is_c64os && value == null) {
+    .error @"_64SPEC configuration option - \"" + expected_key + @"\" cannot be an empty string."
+  }
+  #endif
+
+  .eval _64SPEC.set(key, value)
+  .return true
+}
+
 .function validate_character_option(expected_key, key, value) {
   .if (key != expected_key) .return false
 
@@ -333,8 +363,6 @@
 }
 
 // Code begins here...
-
-  :BasicUpstart2(tests_init)
 
 .pc = * "Tests Data"
   _version_major: .byte _64SPEC_VERSION_MAJOR
@@ -540,17 +568,21 @@ specification:
  * for the Context Drawing System.
  */
 .macro _change_text_color_on_final_result() {
-  .if (_64SPEC.change_text_color_on_final_result) {
-    bit sfspec._tests_result
-    bvs success 
-    failure:
-      :_set_text_color #_64SPEC.failure_color
-    jmp end
-    success:
-      :_set_text_color #_64SPEC.success_color
-    end:
+  .if (_64SPEC.is_c64os) {
+    jsr _64SPEC.c64os_change_text_color_on_final_result_routine
   } else {
-    :_set_text_color #_64SPEC.text_color
+    .if (_64SPEC.change_text_color_on_final_result) {
+      bit sfspec._tests_result
+      bvs success 
+      failure:
+        :_set_text_color #_64SPEC.failure_color
+      jmp end
+      success:
+        :_set_text_color #_64SPEC.success_color
+      end:
+    } else {
+      :_set_text_color #_64SPEC.text_color
+    }
   }
 }
 
@@ -559,20 +591,24 @@ specification:
  * for the Context Drawing System.
  */
 .macro _set_screen_colors() {
-  .if ([_64SPEC.change_border_color && _64SPEC.change_border_color_on_final_result] || [_64SPEC.change_background_color && _64SPEC.change_background_color_on_final_result]) {
-      bit sfspec._tests_result
-      bvs success 
-  failure:
-      lda #_64SPEC.failure_color
-      jmp end
-  success:
-      lda #_64SPEC.success_color
-  end:
-    .if (_64SPEC.change_border_color && _64SPEC.change_border_color_on_final_result) {
-      sta _BORDER
-    }
-    .if (_64SPEC.change_background_color && _64SPEC.change_background_color_on_final_result) {
-      sta _BACKGROUND
+  .if (_64SPEC.is_c64os) {
+    jsr _64SPEC.c64os_set_screen_colors_routine
+  } else {
+    .if ([_64SPEC.change_border_color && _64SPEC.change_border_color_on_final_result] || [_64SPEC.change_background_color && _64SPEC.change_background_color_on_final_result]) {
+        bit sfspec._tests_result
+        bvs success 
+    failure:
+        lda #_64SPEC.failure_color
+        jmp end
+    success:
+        lda #_64SPEC.success_color
+    end:
+      .if (_64SPEC.change_border_color && _64SPEC.change_border_color_on_final_result) {
+        sta _BORDER
+      }
+      .if (_64SPEC.change_background_color && _64SPEC.change_background_color_on_final_result) {
+        sta _BACKGROUND
+      }
     }
   }
 }
@@ -1172,10 +1208,14 @@ end_filename:
  * C64 OS KERNAL call.
  */
 .macro _64spec_kernal_plot_get(cursor_position) {
-  sec
-  jsr _PLOT
-  stx cursor_position._row
-  sty cursor_position._column
+  .if (_64SPEC.is_c64os) {
+    jsr _64SPEC.c64os_kernal_plot_get_routine
+  } else {
+    sec
+    jsr _PLOT
+    stx cursor_position._row
+    sty cursor_position._column
+  }
 }
 
 /*
@@ -1183,10 +1223,14 @@ end_filename:
  * C64 OS KERNAL call.
  */
 .macro _64spec_kernal_plot_set(cursor_position) {
-  clc
-  ldx cursor_position._row
-  ldy cursor_position._column
-  jsr _PLOT
+  .if (_64SPEC.is_c64os) {
+    jsr _64SPEC.c64os_kernal_plot_set_routine
+  } else {
+    clc
+    ldx cursor_position._row
+    ldy cursor_position._column
+    jsr _PLOT
+  }
 }
 
 .macro _64spec_declare_common_context_and_example_metadata(allocate_data) {
